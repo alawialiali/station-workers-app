@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>حساب عمال المحطة</title>
+<style>
+:root{--bg:#f5f6f8;--card:#fff;--text:#1c2330;--muted:#6b7585;--line:#dde1e8;--accent:#0f766e;--accent-t:#fff;--bad:#c0392b;--soft:#e6f4f2;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#12161c;--card:#1b222b;--text:#e8ecf1;--muted:#93a0b0;--line:#2b3542;--accent:#2dd4bf;--accent-t:#06201d;--bad:#ff7b6b;--soft:#16302d;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#12161c;--card:#1b222b;--text:#e8ecf1;--muted:#93a0b0;--line:#2b3542;--accent:#2dd4bf;--accent-t:#06201d;--bad:#ff7b6b;--soft:#16302d;color-scheme:dark}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;line-height:1.5}
+.wrap{max-width:640px;margin:0 auto;padding:16px}
+h1{font-size:20px;margin:4px 0 14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+.row{display:flex;gap:10px}
+.row>*{flex:1;min-width:0}
+label{display:block;font-size:13px;color:var(--muted);margin-bottom:4px}
+input{width:100%;font:inherit;font-size:16px;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--text)}
+input:focus{outline:2px solid var(--accent);border-color:transparent}
+.res{margin-top:12px;background:var(--soft);border-radius:10px;padding:10px 12px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.res b{font-size:18px;color:var(--accent)}
+.err{color:var(--bad);font-size:13px;margin-top:8px}
+.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.del{background:none;border:none;color:var(--bad);font:inherit;font-size:14px;cursor:pointer;padding:4px 8px}
+.add{width:100%;padding:12px;font:inherit;font-size:16px;border:1.5px dashed var(--accent);background:none;color:var(--accent);border-radius:12px;cursor:pointer;margin-bottom:12px}
+.total{background:var(--accent);color:var(--accent-t);border-radius:14px;padding:16px}
+.total div{display:flex;justify-content:space-between;margin:2px 0}
+.total .big{font-size:24px;font-weight:700;margin-top:6px}
+.status{margin-top:10px;padding:12px;border-radius:10px;font-weight:700;text-align:center;font-size:17px;background:var(--bg);color:var(--muted)}
+.status.owe{background:#fdecea;color:#b3261e}
+.status.ok{background:#e3f6e8;color:#1b7a3a}
+.status.extra{background:#fff4d6;color:#8a5a00}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .status.owe{background:#3a1a17;color:#ff9b8f}:root:not([data-theme="light"]) .status.ok{background:#14301d;color:#6be08f}:root:not([data-theme="light"]) .status.extra{background:#3a2e0e;color:#ffd166}}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.sub{font-size:14px;font-weight:700;margin:14px 0 6px}.paidtot{font-size:22px;font-weight:700;color:var(--accent)}small.st{color:var(--accent);font-size:12px}
+.reset{background:none;border:none;color:var(--muted);font:inherit;font-size:13px;margin-top:12px;cursor:pointer;text-decoration:underline}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>⛽ حساب عمال المحطة</h1>
+<div class="card row">
+  <div><label>التاريخ</label><input type="date" id="date"></div>
+  <div><label>سعر اللتر</label><input type="number" id="price" value="525" inputmode="decimal"></div>
+</div>
+<div id="list"></div>
+<button class="add" id="add">+ إضافة عامل</button>
+<div class="total">
+  <div><span>إجمالي اللترات</span><span id="tl">0</span></div>
+  <div class="big"><span>إجمالي المطلوب</span><span id="ta">0</span></div>
+  <div><span>إجمالي المسلَّم</span><span id="tp">0</span></div>
+  <div><span>المتبقي الكلي</span><span id="tr">صفر</span></div>
+</div>
+<button class="reset" id="reset">مسح كل البيانات</button>
+</div>
+<script>
+var KEY="station-v1",S={price:525,date:"",workers:[]};
+function load(){try{var r=localStorage.getItem(KEY);if(r){var d=JSON.parse(r);if(d&&d.workers)S=d}}catch(e){}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+function num(v){var n=parseFloat(v);return isNaN(n)?null:n}
+function fmt(n){return n.toLocaleString("en-US",{maximumFractionDigits:2})}
+var DEN=[1000,500,250,200,100];
+function payTotal(w){var t=0,c=w.cash||{},a=w.wal||{};DEN.forEach(function(d){t+=d*(num(c[d])||0)});t+=num(c.other)||0;for(var k in a)t+=num(a[k])||0;return t}
+function dens(){return DEN.map(function(d){return '<div><label>فئة '+d+' <small class="st" data-s="'+d+'"></small></label><input data-g="cash" data-k="'+d+'" type="number" inputmode="numeric" placeholder="العدد"></div>'}).join('')+'<div><label>فئات أخرى (المبلغ)</label><input data-g="cash" data-k="other" type="number" inputmode="decimal"></div>'}
+function wals(){return '<div><label>محفظة جيب</label><input data-g="wal" data-k="jaib" type="number" inputmode="decimal" placeholder="المبلغ"></div><div><label>بنك الكريمي</label><input data-g="wal" data-k="kuraimi" type="number" inputmode="decimal" placeholder="المبلغ"></div><div><label>محافظ وبنوك أخرى</label><input data-g="wal" data-k="other" type="number" inputmode="decimal" placeholder="المبلغ"></div>'}
+function newW(){return{name:"",pump:"",before:"",after:"",cash:{},wal:{}}}
+function calc(w){var b=num(w.before),a=num(w.after);if(b===null||a===null)return{l:0,ok:false,err:""};if(a<b)return{l:0,ok:false,err:"رقم العداد بعد العمل أقل من قبل العمل"};return{l:a-b,ok:true,err:""}}
+function render(){
+  var list=document.getElementById("list");list.innerHTML="";
+  S.workers.forEach(function(w,i){
+    var c=document.createElement("div");c.className="card";
+    c.innerHTML='<div class="top"><strong>العامل '+(i+1)+'</strong><button class="del">حذف</button></div>'+
+    '<div class="row"><div><label>اسم العامل</label><input data-k="name"></div><div><label>رقم الطرمبة</label><input data-k="pump"></div></div>'+
+    '<div class="row" style="margin-top:10px"><div><label>العداد قبل العمل</label><input data-k="before" type="number" inputmode="decimal"></div><div><label>العداد بعد العمل</label><input data-k="after" type="number" inputmode="decimal"></div></div>'+
+    '<div class="err"></div><div class="res"><span>اللترات: <b class="l">0</b></span><span>المبلغ المطلوب: <b class="a">0</b></span></div>'+
+    '<div style="margin-top:10px"><label>المبلغ الذي مع العامل (المسلَّم)</label><div class="paidtot">0</div></div>'+
+    '<div class="sub">الفئات النقدية (اكتب عدد الأوراق من كل فئة)</div><div class="grid">'+dens()+'</div>'+
+    '<div class="sub">المحافظ والبنوك (اكتب المبلغ)</div><div class="grid">'+wals()+'</div>'+
+    '<div class="status"></div>';
+    c.querySelectorAll("input").forEach(function(inp){
+      var o=inp.dataset.g?(w[inp.dataset.g]=w[inp.dataset.g]||{}):w;inp.value=o[inp.dataset.k]||"";
+      inp.addEventListener("input",function(){o[inp.dataset.k]=inp.value;update(c,w);save();totals()});
+    });
+    c.querySelector(".del").onclick=function(){S.workers.splice(i,1);save();render()};
+    list.appendChild(c);update(c,w);
+  });
+  totals();
+}
+function stat(due,paid,ready){var d=Math.round((due-paid)*100)/100;if(!ready)return{t:"أدخل أرقام العداد",c:""};if(d>0)return{t:"متبقي عليك "+fmt(d),c:"owe"};if(d<0)return{t:"زيادة معك "+fmt(-d),c:"extra"};return{t:"الحساب جاهز، المتبقي صفر ✓",c:"ok"}}
+function update(c,w){var r=calc(w),p=num(S.price)||0,due=r.l*p,paid=payTotal(w);c.querySelector(".paidtot").textContent=fmt(paid);DEN.forEach(function(d){var e=c.querySelector('[data-s="'+d+'"]'),v=(num((w.cash||{})[d])||0)*d;if(e)e.textContent=v?"= "+fmt(v):""});c.querySelector(".l").textContent=fmt(r.l);c.querySelector(".a").textContent=fmt(due);c.querySelector(".err").textContent=r.err;var s=stat(due,paid,r.ok),e=c.querySelector(".status");e.textContent=s.t;e.className="status "+s.c}
+function totals(){var p=num(S.price)||0,l=0,pd=0;S.workers.forEach(function(w){l+=calc(w).l;pd+=payTotal(w)});document.getElementById("tl").textContent=fmt(l);document.getElementById("ta").textContent=fmt(l*p);document.getElementById("tp").textContent=fmt(pd);var d=Math.round((l*p-pd)*100)/100;document.getElementById("tr").textContent=d>0?"متبقي "+fmt(d):d<0?"زيادة "+fmt(-d):"صفر"}
+load();
+if(!S.date)S.date=new Date().toISOString().slice(0,10);
+if(!S.workers.length)S.workers.push(newW());
+var dt=document.getElementById("date"),pr=document.getElementById("price");
+dt.value=S.date;pr.value=S.price;
+dt.oninput=function(){S.date=dt.value;save()};
+pr.oninput=function(){S.price=pr.value;save();render()};
+document.getElementById("add").onclick=function(){S.workers.push(newW());save();render()};
+document.getElementById("reset").onclick=function(){if(confirm("مسح كل بيانات العمال؟")){S.workers=[newW()];save();render()}};
+render();
+</script>
+</body>
+</html>
